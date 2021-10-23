@@ -20,70 +20,14 @@ variable "app_count" {
   default = 1
 }
 
-data "aws_availability_zones" "available_zones" {
-  state = "available"
-}
 
-resource "aws_vpc" "default" {
-  cidr_block = "10.32.0.0/16"
-}
-
-resource "aws_subnet" "public" {
-  count                   = 2
-  cidr_block              = cidrsubnet(aws_vpc.default.cidr_block, 8, 2 + count.index)
-  availability_zone       = data.aws_availability_zones.available_zones.names[count.index]
-  vpc_id                  = aws_vpc.default.id
-  map_public_ip_on_launch = true
-}
-
-resource "aws_subnet" "private" {
-  count             = 2
-  cidr_block        = cidrsubnet(aws_vpc.default.cidr_block, 8, count.index)
-  availability_zone = data.aws_availability_zones.available_zones.names[count.index]
-  vpc_id            = aws_vpc.default.id
-}
-
-resource "aws_internet_gateway" "gateway" {
-  vpc_id = aws_vpc.default.id
-}
-
-resource "aws_route" "internet_access" {
-  route_table_id         = aws_vpc.default.main_route_table_id
-  destination_cidr_block = "0.0.0.0/0"
-  gateway_id             = aws_internet_gateway.gateway.id
-}
-
-resource "aws_eip" "gateway" {
-  count      = 2
-  vpc        = true
-  depends_on = [aws_internet_gateway.gateway]
-}
-
-resource "aws_nat_gateway" "gateway" {
-  count         = 2
-  subnet_id     = element(aws_subnet.public.*.id, count.index)
-  allocation_id = element(aws_eip.gateway.*.id, count.index)
-}
-
-resource "aws_route_table" "private" {
-  count  = 2
-  vpc_id = aws_vpc.default.id
-
-  route {
-    cidr_block = "0.0.0.0/0"
-    nat_gateway_id = element(aws_nat_gateway.gateway.*.id, count.index)
-  }
-}
-
-resource "aws_route_table_association" "private" {
-  count          = 2
-  subnet_id      = element(aws_subnet.private.*.id, count.index)
-  route_table_id = element(aws_route_table.private.*.id, count.index)
+module "network" {
+  source = "./modules/network"
 }
 
 resource "aws_security_group" "lb" {
   name        = "example-alb-security-group"
-  vpc_id      = aws_vpc.default.id
+  vpc_id      = module.network.vpc_id
 
   ingress {
     protocol    = "tcp"
@@ -102,7 +46,7 @@ resource "aws_security_group" "lb" {
 
 resource "aws_lb" "default" {
   name            = "example-lb"
-  subnets         = aws_subnet.public.*.id
+  subnets         = module.network.subnet_public.*.id //aws_subnet.public.*.id
   security_groups = [aws_security_group.lb.id]
 }
 
@@ -110,7 +54,7 @@ resource "aws_lb_target_group" "hello_world" {
   name        = "example-target-group"
   port        = 80
   protocol    = "HTTP"
-  vpc_id      = aws_vpc.default.id
+  vpc_id      =  module.network.vpc_id //aws_vpc.default.id
   target_type = "ip"
 }
 
@@ -153,7 +97,7 @@ DEFINITION
 
 resource "aws_security_group" "hello_world_task" {
   name        = "example-task-security-group"
-  vpc_id      = aws_vpc.default.id
+  vpc_id      = module.network.vpc_id
 
   ingress {
     protocol        = "tcp"
@@ -183,7 +127,7 @@ resource "aws_ecs_service" "hello_world" {
 
   network_configuration {
     security_groups = [aws_security_group.hello_world_task.id]
-    subnets         = aws_subnet.private.*.id
+    subnets         = module.network.subnet_private.*.id
   }
 
   load_balancer {
