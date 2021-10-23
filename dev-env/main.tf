@@ -14,7 +14,6 @@ provider "aws" {
   region  = "ap-southeast-1"
 }
 
-//network vpc
 variable "app_count" {
   type = number
   default = 1
@@ -24,49 +23,10 @@ variable "app_count" {
 module "network" {
   source = "./modules/network"
 }
-
-resource "aws_security_group" "lb" {
-  name        = "example-alb-security-group"
-  vpc_id      = module.network.vpc_id
-
-  ingress {
-    protocol    = "tcp"
-    from_port   = 80
-    to_port     = 80
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port = 0
-    to_port   = 0
-    protocol  = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-resource "aws_lb" "default" {
-  name            = "example-lb"
-  subnets         = module.network.subnet_public.*.id //aws_subnet.public.*.id
-  security_groups = [aws_security_group.lb.id]
-}
-
-resource "aws_lb_target_group" "hello_world" {
-  name        = "example-target-group"
-  port        = 80
-  protocol    = "HTTP"
-  vpc_id      =  module.network.vpc_id //aws_vpc.default.id
-  target_type = "ip"
-}
-
-resource "aws_lb_listener" "hello_world" {
-  load_balancer_arn = aws_lb.default.id
-  port              = "80"
-  protocol          = "HTTP"
-
-  default_action {
-    target_group_arn = aws_lb_target_group.hello_world.id
-    type             = "forward"
-  }
+module "load_balancer" {
+  source = "./modules/load_balancer"
+  vpc_id = module.network.vpc_id
+  subnet_public = module.network.subnet_public
 }
 
 resource "aws_ecs_task_definition" "hello_world" {
@@ -103,7 +63,9 @@ resource "aws_security_group" "hello_world_task" {
     protocol        = "tcp"
     from_port       = 3000
     to_port         = 3000
-    security_groups = [aws_security_group.lb.id]
+    security_groups = [
+      module.load_balancer.security_group_id
+    ]
   }
 
   egress {
@@ -131,14 +93,16 @@ resource "aws_ecs_service" "hello_world" {
   }
 
   load_balancer {
-    target_group_arn = aws_lb_target_group.hello_world.id
+    target_group_arn = module.load_balancer.target_group_id
     container_name   = "hello-world-app"
     container_port   = 3000
   }
 
-  depends_on = [aws_lb_listener.hello_world]
+  depends_on = [
+    module.load_balancer.lb_listener
+  ]
 }
 
 output "load_balancer_ip" {
-  value = aws_lb.default.dns_name
+  value = module.load_balancer.lb_dns_name
 }
