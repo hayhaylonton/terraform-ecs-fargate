@@ -29,6 +29,10 @@ module "load_balancer" {
   subnet_public = module.network.subnet_public
 }
 
+module "ecs_cluster" {
+  source = "./modules/ecs_cluster"
+}
+
 resource "aws_ecs_task_definition" "hello_world" {
   family                   = "hello-world-app"
   network_mode             = "awsvpc"
@@ -76,13 +80,9 @@ resource "aws_security_group" "hello_world_task" {
   }
 }
 
-resource "aws_ecs_cluster" "main" {
-  name = "example-cluster"
-}
-
 resource "aws_ecs_service" "hello_world" {
   name            = "hello-world-service"
-  cluster         = aws_ecs_cluster.main.id
+  cluster         = module.ecs_cluster.ecs_cluster_id
   task_definition = aws_ecs_task_definition.hello_world.arn
   desired_count   = var.app_count
   launch_type     = "FARGATE"
