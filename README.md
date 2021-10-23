@@ -1,1 +1,4 @@
-# terraform-ecs-fargate
+# deploy
+cd dev-env
+terraform init
+terraform apply -auto-approve
