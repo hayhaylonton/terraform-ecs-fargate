@@ -25,17 +25,23 @@ module "load_balancer" {
   source = "./modules/load_balancer"
   vpc_id = module.network.vpc_id
   subnet_public = module.network.subnet_public
+  depends_on = [
+    module.network,module.ecs_cluster
+  ]
 }
 
 module "apps" {
   source = "./modules/apps"
   app_count=1
   vpc_id = module.network.vpc_id
-  security_group_id = module.load_balancer.target_group_id
+  security_group_id = module.load_balancer.security_group_id
   ecs_cluster_id = module.ecs_cluster.ecs_cluster_id
   lb_listener=module.load_balancer.lb_listener
   target_group_id = module.load_balancer.target_group_id
   subnet_private = module.network.subnet_private
+  depends_on = [
+    module.network,module.ecs_cluster,module.load_balancer
+  ]
 }
 
 output "load_balancer_ip" {

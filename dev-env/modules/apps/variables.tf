@@ -21,5 +21,5 @@ variable "target_group_id" {
   description = "target_group_id"
 }
 variable "subnet_private" {
-  description = "target_group_id"
+  description = "subnet_private"
 }
